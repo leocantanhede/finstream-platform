@@ -4,7 +4,7 @@ spring:
   
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:finstream}
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:FINSTREAM}
     username: ${DB_USER:root}
     password: ${DB_PASSWORD:lun@2404}
     hikari:
