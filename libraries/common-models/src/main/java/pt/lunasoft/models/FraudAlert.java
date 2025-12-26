@@ -8,6 +8,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import pt.lunasoft.models.enums.AlertStatus;
+import pt.lunasoft.models.enums.FraudSeverity;
 
 @Data
 @Builder

@@ -1,4 +1,4 @@
-package pt.lunasoft.models;
+package pt.lunasoft.models.enums;
 
 public enum TransactionType {
 	PURCHASE,

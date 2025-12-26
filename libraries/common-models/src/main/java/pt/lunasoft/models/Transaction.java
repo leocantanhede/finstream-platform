@@ -14,6 +14,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import pt.lunasoft.models.enums.TransactionStatus;
+import pt.lunasoft.models.enums.TransactionType;
 
 @Data
 @Builder
