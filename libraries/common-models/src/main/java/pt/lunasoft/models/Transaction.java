@@ -50,7 +50,7 @@ public class Transaction {
 	private String description;
 	private Location location;
 	private DeviceInfo deviceInfo;
-	private Instant createAt;
-	private Instant updateAt;
+	private Instant createdAt;
+	private Instant updatedAt;
 	
 }
