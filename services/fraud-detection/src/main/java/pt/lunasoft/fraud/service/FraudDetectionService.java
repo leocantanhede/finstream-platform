@@ -1,10 +1,7 @@
 package pt.lunasoft.fraud.service;
 
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -22,105 +19,36 @@ import pt.lunasoft.models.enums.FraudSeverity;
 public class FraudDetectionService {
 
 	private final TransactionHistoryService historyService;
-    //private final FraudRuleEngine ruleEngine;
+    private final FraudRuleEngine ruleEngine;
 
     public FraudAlert analyzeTransaction(Transaction transaction) {
         log.info("Analyzing transaction: {} for account: {}", transaction.getId(), transaction.getAccountId());
 
-        List<String> triggeredRules = new ArrayList<>();
-        double riskScore = 0.0;
+        // Add transaction to history first
+        historyService.addTransaction(transaction);
 
-        // Rule 1: High amount transaction
-        if (isHighAmountTransaction(transaction)) {
-            triggeredRules.add("HIGH_AMOUNT");
-            riskScore += 30.0;
-        }
+        // Evaluate all fraud rules using the rule engine
+        Map<String, Double> ruleScores = ruleEngine.evaluateAllRules(transaction);
+        
+        // Calculate overall risk score
+        double riskScore = ruleEngine.calculateOverallRiskScore(ruleScores);
+        
+        // Get list of triggered rules
+        List<String> triggeredRules = ruleEngine.getTriggeredRules(ruleScores);
 
-        // Rule 2: Unusual location
-        if (isUnusualLocation(transaction)) {
-            triggeredRules.add("UNUSUAL_LOCATION");
-            riskScore += 25.0;
-        }
-
-        // Rule 3: Rapid succession transactions
-        if (isRapidSuccession(transaction)) {
-            triggeredRules.add("RAPID_SUCCESSION");
-            riskScore += 35.0;
-        }
-
-        // Rule 4: Unusual time
-        if (isUnusualTime(transaction)) {
-            triggeredRules.add("UNUSUAL_TIME");
-            riskScore += 15.0;
-        }
-
-        // Rule 5: Velocity check
-        if (exceedsVelocityLimit(transaction)) {
-            triggeredRules.add("VELOCITY_EXCEEDED");
-            riskScore += 40.0;
-        }
+        // Log detailed analysis
+        log.debug("Transaction {} analysis - Risk Score: {}, Triggered Rules: {}", transaction.getId(), riskScore, triggeredRules);
 
         // Create alert if risk score exceeds threshold
         if (riskScore >= 50.0 || !triggeredRules.isEmpty()) {
-            return createFraudAlert(transaction, riskScore, triggeredRules);
+            FraudAlert alert = createFraudAlert(transaction, riskScore, triggeredRules);
+            log.warn("Fraud alert created: {} for transaction: {} with risk score: {}", alert.getId(), transaction.getId(), riskScore);
+            return alert;
         }
 
+        log.info("Transaction {} passed fraud checks with risk score: {}", transaction.getId(), riskScore);
+        
         return null;
-    }
-
-    private boolean isHighAmountTransaction(Transaction transaction) {
-        return transaction.getAmount().compareTo(new BigDecimal("5000")) > 0;
-    }
-
-    private boolean isUnusualLocation(Transaction transaction) {
-        if (transaction.getLocation() == null) {
-            return false;
-        }
-        
-        List<Transaction> recentTransactions = historyService.getRecentTransactions(transaction.getAccountId(), 10);
-        
-        if (recentTransactions.isEmpty()) {
-            return false;
-        }
-
-        // Check if location differs significantly from recent transactions
-        String currentCountry = transaction.getLocation().getCountry();
-        long sameCountryCount = recentTransactions.stream()
-                .filter(t -> t.getLocation() != null)
-                .filter(t -> currentCountry.equals(t.getLocation().getCountry()))
-                .count();
-
-        return sameCountryCount == 0;
-    }
-
-    private boolean isRapidSuccession(Transaction transaction) {
-        List<Transaction> recentTransactions = historyService.getRecentTransactions(transaction.getAccountId(), 5);
-        
-        if (recentTransactions.isEmpty()) {
-            return false;
-        }
-
-        Transaction lastTransaction = recentTransactions.get(0);
-        Duration timeDiff = Duration.between(lastTransaction.getTimestamp(), transaction.getTimestamp());
-
-        return timeDiff.toMinutes() < 2;
-    }
-
-    private boolean isUnusualTime(Transaction transaction) {
-        int hour = transaction.getTimestamp().atZone(java.time.ZoneId.systemDefault()).getHour();
-        
-        // Flag transactions between 2 AM and 5 AM as unusual
-        return hour >= 2 && hour < 5;
-    }
-
-    private boolean exceedsVelocityLimit(Transaction transaction) {
-        Instant oneHourAgo = Instant.now().minus(Duration.ofHours(1));
-        
-        BigDecimal totalAmount = historyService.getTotalAmountSince(transaction.getAccountId(), oneHourAgo);
-        
-        totalAmount = totalAmount.add(transaction.getAmount());
-        
-        return totalAmount.compareTo(new BigDecimal("10000")) > 0;
     }
 
     private FraudAlert createFraudAlert(Transaction transaction, double riskScore, List<String> triggeredRules) {
@@ -136,7 +64,7 @@ public class FraudDetectionService {
                 .triggeredRules(triggeredRules)
                 .description(buildDescription(triggeredRules, riskScore))
                 .status(AlertStatus.OPEN)
-                .detectedAt(Instant.now())
+                .detectedAt(java.time.Instant.now())
                 .build();
     }
 
@@ -152,7 +80,39 @@ public class FraudDetectionService {
     }
 
     private String buildDescription(List<String> rules, double riskScore) {
-        return String.format("Fraud detection triggered. Risk score: %.2f. Rules: %s", riskScore, String.join(", ", rules));
+        if (rules.isEmpty()) {
+            return String.format("Potential fraud detected with risk score: %.2f", riskScore);
+        }
+        
+        StringBuilder description = new StringBuilder();
+        description.append(String.format("Fraud detection triggered. Risk score: %.2f. ", riskScore));
+        description.append("Rules violated: ");
+        
+        // Add human-readable descriptions for each rule
+        for (int i = 0; i < rules.size(); i++) {
+            if (i > 0) {
+                description.append(", ");
+            }
+            description.append(getRuleDescription(rules.get(i)));
+        }
+        
+        return description.toString();
+    }
+
+    private String getRuleDescription(String ruleName) {
+        return switch (ruleName) {
+            case "HIGH_AMOUNT" -> "Unusually high transaction amount";
+            case "UNUSUAL_LOCATION" -> "Transaction from unusual location";
+            case "RAPID_SUCCESSION" -> "Multiple transactions in rapid succession";
+            case "UNUSUAL_TIME" -> "Transaction at unusual time";
+            case "VELOCITY_CHECK" -> "Transaction velocity exceeded limits";
+            case "DUPLICATE_TRANSACTION" -> "Potential duplicate transaction";
+            case "UNUSUAL_MERCHANT" -> "Transaction with unusual merchant";
+            case "DEVICE_FINGERPRINT" -> "Transaction from unknown device";
+            case "ROUND_AMOUNT" -> "Round amount transaction pattern";
+            case "GEOGRAPHIC_IMPOSSIBLE" -> "Geographically impossible travel";
+            default -> ruleName;
+        };
     }
 	
 }
