@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'transaction-ingestion'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['transaction-ingestion:8080']
+        labels:
+          application: 'transaction-ingestion-service'
+
+  - job_name: 'fraud-detection'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['fraud-detection:8081']
+        labels:
+          application: 'fraud-detection-service'
+
+  - job_name: 'analytics-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['analytics-service:8082']
+        labels:
+          application: 'analytics-service'
