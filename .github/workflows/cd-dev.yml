@@ -1,0 +1,215 @@
+name: CD - Development
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: finstream-dev-cluster
+  K8S_NAMESPACE: finstream-dev
+
+jobs:
+  deploy-to-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    environment: development
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ env.EKS_CLUSTER_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+
+      - name: Deploy MySQL
+        run: |
+          helm upgrade --install mysql \
+            oci://registry-1.docker.io/bitnamicharts/mysql \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --create-namespace \
+            --set auth.database=FINSTREAM \
+            --set auth.username=root \
+            --set auth.password=${{ secrets.DB_PASSWORD }} \
+            --set primary.persistence.size=20Gi \
+            --set architecture=standalone \
+            --wait \
+            --timeout 10m
+
+      - name: Deploy Redis
+        run: |
+          helm upgrade --install redis \
+            oci://registry-1.docker.io/bitnamicharts/redis \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --set auth.password=${{ secrets.REDIS_PASSWORD }} \
+            --set master.persistence.size=8Gi \
+            --wait \
+            --timeout 5m
+
+      - name: Deploy Kafka
+        run: |
+          helm upgrade --install kafka \
+            oci://registry-1.docker.io/bitnamicharts/kafka \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --set replicaCount=3 \
+            --set persistence.size=10Gi \
+            --wait \
+            --timeout 10m
+
+      - name: Wait for MySQL to be ready
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=mysql \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --timeout=300s
+
+      - name: Create Kubernetes Secrets
+        run: |
+          kubectl create secret generic jwt-secret \
+            --from-literal=secret=${{ secrets.JWT_SECRET }} \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic db-credentials \
+            --from-literal=host=mysql.${{ env.K8S_NAMESPACE }}.svc.cluster.local \
+            --from-literal=port=3306 \
+            --from-literal=database=FINSTREAM \
+            --from-literal=username=root \
+            --from-literal=password=${{ secrets.DB_PASSWORD }} \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f infrastructure/kubernetes/base/ \
+            --namespace ${{ env.K8S_NAMESPACE }}
+
+      - name: Update microservices images
+        run: |
+          for service in transaction-ingestion fraud-detection analytics-service notification-service api-gateway; do
+            kubectl set image deployment/${service} \
+              ${service}=${{ secrets.DOCKER_USERNAME }}/finstream-${service}:${{ github.sha }} \
+              --namespace ${{ env.K8S_NAMESPACE }} \
+              --record
+            
+            echo "Waiting for ${service} rollout..."
+            kubectl rollout status deployment/${service} \
+              --namespace ${{ env.K8S_NAMESPACE }} \
+              --timeout=5m
+          done
+
+      - name: Verify all deployments
+        run: |
+          kubectl get deployments \
+            --namespace ${{ env.K8S_NAMESPACE }}
+          
+          kubectl get pods \
+            --namespace ${{ env.K8S_NAMESPACE }}
+
+      - name: Run database migrations
+        run: |
+          # Wait for transaction-ingestion pod to be ready (it runs Liquibase)
+          kubectl wait --for=condition=ready pod \
+            -l app=transaction-ingestion \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --timeout=300s
+          
+          echo "Database migrations completed via Liquibase"
+
+      - name: Run smoke tests
+        run: |
+          chmod +x ./scripts/smoke-tests.sh
+          ./scripts/smoke-tests.sh ${{ env.K8S_NAMESPACE }}
+
+      - name: Get service URLs
+        id: urls
+        run: |
+          GATEWAY_URL=$(kubectl get service api-gateway-service \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "gateway_url=$GATEWAY_URL" >> $GITHUB_OUTPUT
+
+      - name: Run health checks
+        run: |
+          GATEWAY_URL="${{ steps.urls.outputs.gateway_url }}"
+          
+          echo "Checking API Gateway health..."
+          for i in {1..10}; do
+            if curl -f -s http://${GATEWAY_URL}/actuator/health; then
+              echo "API Gateway is healthy!"
+              break
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 10
+          done
+
+      - name: Notify deployment success
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "✅ Deployment to DEV successful!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Status: SUCCESS* ✅\n*Environment:* Development\n*Commit:* `${{ github.sha }}`\n*Author:* ${{ github.actor }}\n*Gateway URL:* http://${{ steps.urls.outputs.gateway_url }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Database:* MySQL 9.5"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Namespace:* ${{ env.K8S_NAMESPACE }}"
+                    }
+                  ]
+                }
+              ]
+            }
+
+      - name: Notify deployment failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "❌ Deployment to DEV failed!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Status: FAILED* ❌\n*Environment:* Development\n*Commit:* `${{ github.sha }}`\n*Author:* ${{ github.actor }}\n*Build URL:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
