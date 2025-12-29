@@ -1,4 +1,4 @@
-package pt.lunasoft.fraud.service;
+package pt.lunasoft.fraud.engine;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import pt.lunasoft.fraud.service.TransactionHistoryService;
 import pt.lunasoft.models.Transaction;
 
 @Component

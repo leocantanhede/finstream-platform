@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import pt.lunasoft.fraud.engine.FraudRuleEngine;
 import pt.lunasoft.models.FraudAlert;
 import pt.lunasoft.models.Transaction;
 import pt.lunasoft.models.enums.AlertStatus;

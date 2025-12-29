@@ -13,9 +13,14 @@ services:
       - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+    healthcheck: 
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - finstream-network
-	  
+  
   # Redis
   redis:
     image: redis:7-alpine
@@ -32,7 +37,7 @@ services:
       retries: 5
     networks:
       - finstream-network
-	  
+  
   # Zookeeper (for Kafka)
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -97,7 +102,7 @@ services:
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     networks:
       - finstream-network
-	  
+  
   # Prometheus
   prometheus:
     image: prom/prometheus:latest
