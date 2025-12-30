@@ -1,0 +1,133 @@
+spring:
+  application:
+    name: notification-service
+  
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:FINSTREAM}
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:lun@2404}
+    hikari:
+      maximum-pool-size: 10
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        '[format_sql]': true
+    show-sql: false
+  
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    enabled: true
+  
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: notification-consumer-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        '[spring.json.trusted.packages]': pt.lunasoft.models
+  
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  
+  # Mail Configuration
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+  
+  # Thymeleaf
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+
+server:
+  port: 8083
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    prometheus:
+      enabled: true
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    '[pt.lunasoft]': DEBUG
+    '[org.springframework.kafka]': INFO
+
+# Custom Application Properties
+app:
+  kafka:
+    topics:
+      fraud-alerts: fraud.alerts
+      transaction-status: transaction.status
+  
+  notification:
+    # Email settings
+    email:
+      enabled: true
+      from: noreply@finstream.com
+      
+    # SMS settings
+    sms:
+      enabled: ${SMS_ENABLED:false}
+      provider: twilio
+      
+    # Push notification settings
+    push:
+      enabled: ${PUSH_ENABLED:false}
+      provider: firebase
+      
+    # Webhook settings
+    webhook:
+      enabled: true
+      retry:
+        max-attempts: 3
+        backoff-ms: 1000
+        
+    # Slack settings
+    slack:
+      enabled: ${SLACK_ENABLED:false}
+      webhook-url: ${SLACK_WEBHOOK_URL:}
+      
+  # Rate limiting
+  rate-limit:
+    email:
+      per-account: 10
+      window-minutes: 60
+    sms:
+      per-account: 5
+      window-minutes: 60
+
+# Twilio Configuration
+twilio:
+  account-sid: ${TWILIO_ACCOUNT_SID:}
+  auth-token: ${TWILIO_AUTH_TOKEN:}
+  phone-number: ${TWILIO_PHONE_NUMBER:}
+
+# Firebase Configuration
+firebase:
+  credentials-path: ${FIREBASE_CREDENTIALS_PATH:}

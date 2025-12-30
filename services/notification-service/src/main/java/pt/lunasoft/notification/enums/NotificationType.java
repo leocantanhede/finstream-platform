@@ -1,0 +1,13 @@
+package pt.lunasoft.notification.enums;
+
+public enum NotificationType {
+	FRAUD_ALERT,
+    TRANSACTION_CONFIRMATION,
+    TRANSACTION_DECLINED,
+    ACCOUNT_LOCKED,
+    PASSWORD_RESET,
+    SECURITY_ALERT,
+    PAYMENT_REMINDER,
+    PROMOTIONAL,
+    SYSTEM_MAINTENANCE
+}
