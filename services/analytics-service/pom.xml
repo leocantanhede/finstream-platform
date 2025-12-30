@@ -17,6 +17,7 @@
     
     <properties>
 		<influxdb.version>6.11.0</influxdb.version>
+		<openapi.version>2.3.0</openapi.version>
 	</properties>
 
     <dependencies>
@@ -78,6 +79,11 @@
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-streams-test-utils</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${openapi.version}</version>
         </dependency>
     </dependencies>
 

@@ -69,7 +69,7 @@ management:
 
 logging:
   level:
-    '[com.finstream]': DEBUG
+    '[pt.lunasoft]': DEBUG
     '[org.springframework.kafka]': INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
