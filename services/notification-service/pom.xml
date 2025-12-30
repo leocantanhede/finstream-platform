@@ -19,6 +19,7 @@
 		<twilio.version>9.14.1</twilio.version>
 		<firebase.version>9.2.0</firebase.version>
 		<slack.version>1.36.1</slack.version>
+		<openapi.version>2.3.0</openapi.version>
 	</properties>
 
     <dependencies>
@@ -106,6 +107,11 @@
             <groupId>org.testcontainers</groupId>
             <artifactId>mysql</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${openapi.version}</version>
         </dependency>
     </dependencies>
 

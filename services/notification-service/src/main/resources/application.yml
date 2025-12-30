@@ -104,9 +104,11 @@ app:
     # Webhook settings
     webhook:
       enabled: true
+      secret-key: ${WEBHOOK_SECRET_KEY:your-webhook-secret-key-change-in-production}
       retry:
         max-attempts: 3
         backoff-ms: 1000
+      timeout-ms: 5000
         
     # Slack settings
     slack:
